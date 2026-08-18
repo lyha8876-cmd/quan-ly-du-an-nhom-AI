@@ -1,0 +1,94 @@
+// FILE: static/js/main.js
+// MÔ TẢ: JavaScript chung cho toàn bộ ứng dụng TaskFlow
+
+'use strict';
+
+//  Tự đóng flash messages sau 5 giây 
+document.addEventListener('DOMContentLoaded', function () {
+  const flashMsgs = document.querySelectorAll('.flash-msg');
+  flashMsgs.forEach(function (msg, idx) {
+    setTimeout(function () {
+      msg.style.transition = 'opacity .4s ease, transform .4s ease';
+      msg.style.opacity = '0';
+      msg.style.transform = 'translateX(110%)';
+      setTimeout(function () { msg.remove(); }, 400);
+    }, 4000 + idx * 500);
+  });
+});
+
+//  Toggle hiện/ẩn mật khẩu 
+function togglePassword(inputId, btnId) {
+  var input = document.getElementById(inputId);
+  var btn   = document.getElementById(btnId);
+  if (!input) return;
+  if (input.type === 'password') {
+    input.type = 'text';
+    if (btn) btn.textContent = '🙈';
+  } else {
+    input.type = 'password';
+    if (btn) btn.textContent = '👁️';
+  }
+}
+
+//  Sidebar toggle trên mobile 
+(function () {
+  var sidebar = document.getElementById('sidebar');
+  if (!sidebar) return;
+
+  // Tạo nút hamburger nếu chưa có
+  var hamBtn = document.createElement('button');
+  hamBtn.id = 'ham-btn';
+  hamBtn.innerHTML = '☰';
+  hamBtn.style.cssText = [
+    'position:fixed', 'top:16px', 'left:16px', 'z-index:200',
+    'background:rgba(108,99,255,.8)', 'border:none', 'color:#fff',
+    'width:40px', 'height:40px', 'border-radius:8px', 'font-size:20px',
+    'cursor:pointer', 'display:none', 'align-items:center', 'justify-content:center'
+  ].join(';');
+
+  document.body.appendChild(hamBtn);
+
+  function checkMobile() {
+    if (window.innerWidth <= 768) {
+      hamBtn.style.display = 'flex';
+    } else {
+      hamBtn.style.display = 'none';
+      sidebar.classList.remove('open');
+    }
+  }
+
+  hamBtn.addEventListener('click', function () {
+    sidebar.classList.toggle('open');
+  });
+
+  // Đóng sidebar khi click ngoài
+  document.addEventListener('click', function (e) {
+    if (window.innerWidth <= 768 &&
+        !sidebar.contains(e.target) &&
+        e.target !== hamBtn) {
+      sidebar.classList.remove('open');
+    }
+  });
+
+  window.addEventListener('resize', checkMobile);
+  checkMobile();
+})();
+
+//  Hiệu ứng progress bar khi trang load 
+window.addEventListener('load', function () {
+  var bars = document.querySelectorAll('.progress-bar-fill');
+  bars.forEach(function (bar) {
+    var w = bar.style.width;
+    bar.style.width = '0';
+    setTimeout(function () { bar.style.width = w; }, 200);
+  });
+});
+
+//  Active nav link theo URL 
+(function () {
+  var path  = window.location.pathname;
+  var links = document.querySelectorAll('.nav-link');
+  links.forEach(function (link) {
+    // Flask đã set class active qua Jinja2, không cần làm gì thêm
+  });
+})();
