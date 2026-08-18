@@ -1,0 +1,127 @@
+# FILE: seed_data.py
+# MÔ TẢ: Nạp dữ liệu mẫu vào CSDL để kiểm thử 
+
+import os, sys, csv, sqlite3
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH  = os.path.join(BASE_DIR, 'database.db')
+DATA_DIR = os.path.join(BASE_DIR, '..') # thư mục cv/
+
+# Import init_db từ app
+sys.path.insert(0, BASE_DIR)
+from app import init_db, get_db
+from werkzeug.security import generate_password_hash
+
+print("=" * 50)
+print("  NAP DU LIEU MAU – TUAN 03")
+print("=" * 50)
+
+# Bước 1: Khởi tạo CSDL
+init_db()
+print("[1] CSDL da san sang")
+
+conn = get_db()
+
+# Bước 2: Thêm users mẫu
+users_mau = [
+    ('Ly Thi Ha',      'lyha@email.com',      'matkhau123'),
+    ('Vang Thi Sinh',  'vangsinh@email.com',  'matkhau123'),
+    ('Nguyen Van A',   'nguyenvana@email.com', 'matkhau123'),
+]
+
+user_ids = {}
+for ten, email, pw in users_mau:
+    try:
+        conn.execute(
+            "INSERT INTO users (ten, email, mat_khau) VALUES (?,?,?)",
+            (ten, email, generate_password_hash(pw))
+        )
+        conn.commit()
+    except sqlite3.IntegrityError:
+        pass  # Đã tồn tại
+    row = conn.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()
+    if row:
+        user_ids[email] = row['id']
+
+print(f"[2] Users: {len(user_ids)} tai khoan san sang")
+
+# Bước 3: Nạp dự án từ CSV
+csv_du_an = os.path.join(DATA_DIR, 'Tuan03_VangThiSinh_DuLieuMau_DuAn.csv')
+project_ids = []
+
+if os.path.exists(csv_du_an):
+    with open(csv_du_an, encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        nguoi_tao_id = user_ids.get('lyha@email.com', 1)
+        for row in reader:
+            ten = row['ten_du_an'].strip()
+            # Kiểm tra đã tồn tại chưa
+            existing = conn.execute(
+                "SELECT id FROM projects WHERE ten_du_an=?", (ten,)
+            ).fetchone()
+            if not existing:
+                conn.execute("""
+                    INSERT INTO projects (ten_du_an, mo_ta, nguoi_tao, ngay_bat_dau, ngay_ket_thuc)
+                    VALUES (?,?,?,?,?)
+                """, (ten, row['mo_ta'].strip(), nguoi_tao_id,
+                      row['ngay_bat_dau'] or None, row['ngay_ket_thuc'] or None))
+                conn.commit()
+            p = conn.execute("SELECT id FROM projects WHERE ten_du_an=?", (ten,)).fetchone()
+            if p:
+                project_ids.append(p['id'])
+
+    print(f"[3] Du an: {len(project_ids)} du an da nap")
+else:
+    print("[3] SKIP: Khong tim thay file CSV du an")
+
+# Bước 4: Nạp nhiệm vụ từ CSV
+csv_nhiem_vu = os.path.join(DATA_DIR, 'Tuan03_VangThiSinh_DuLieuMau_NhiemVu.csv')
+dem_task = 0
+
+# Map index dự án → ID thực
+project_map = {}
+for i, pid in enumerate(project_ids):
+    project_map[str(i + 1)] = pid  # CSV dùng du_an_id = 1,2,3...
+
+# Lấy danh sách users để phân công xoay vòng
+all_users = list(user_ids.values())
+
+if os.path.exists(csv_nhiem_vu):
+    with open(csv_nhiem_vu, encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for idx, row in enumerate(reader):
+            ten = row['ten_nhiem_vu'].strip()
+            du_an_id_csv = row['du_an_id'].strip()
+            real_du_an_id = project_map.get(du_an_id_csv)
+            if not real_du_an_id:
+                continue
+
+            existing = conn.execute(
+                "SELECT id FROM tasks WHERE ten_nhiem_vu=? AND du_an_id=?",
+                (ten, real_du_an_id)
+            ).fetchone()
+            if not existing:
+                phu_trach = all_users[idx % len(all_users)] if all_users else None
+                conn.execute("""
+                    INSERT INTO tasks (ten_nhiem_vu, mo_ta, du_an_id, phu_trach, deadline, trang_thai)
+                    VALUES (?,?,?,?,?,?)
+                """, (ten, row['mo_ta'].strip(), real_du_an_id, phu_trach,
+                      row['deadline'] or None, row['trang_thai'].strip()))
+                dem_task += 1
+        conn.commit()
+    print(f"[4] Nhiem vu: {dem_task} nhiem vu da nap")
+else:
+    print("[4] SKIP: Khong tim thay file CSV nhiem vu")
+
+conn.close()
+
+print()
+print("[DONE] Du lieu mau da san sang!")
+print()
+print("  Tai khoan dang nhap:")
+for ten, email, pw in users_mau:
+    print(f"  - {ten}: {email} / {pw}")
+print()
+print("  Chay server: python app.py")
+print("  Mo trinh duyet: http://127.0.0.1:5000")
+print("=" * 50)
