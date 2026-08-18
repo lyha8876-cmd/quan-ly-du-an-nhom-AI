@@ -1,0 +1,75 @@
+# FILE: run_public.py
+# MÔ TẢ: Chạy app TaskFlow lên Internet qua ngrok
+#         → Tất cả thành viên ở xa đều vào được bằng link
+# CÁCH DÙNG:
+#   1. Đăng ký tài khoản miễn phí tại: https://ngrok.com
+#   2. Lấy authtoken tại: https://dashboard.ngrok.com/get-started/your-authtoken
+#   3. Dán authtoken vào biến NGROK_TOKEN bên dưới
+#   4. Chạy: python run_public.py
+#   5. Chia sẻ link https://xxxx.ngrok-free.app cho các thành viên
+
+import threading
+import time
+from pyngrok import ngrok, conf
+
+#  ĐIỀN AUTHTOKEN CỦA BẠN VÀO ĐÂY 
+# Lấy tại: https://dashboard.ngrok.com/get-started/your-authtoken
+NGROK_TOKEN = "DIEN_TOKEN_CUA_BAN_VAO_DAY"
+
+def start_server():
+    """Khởi động Flask server."""
+    from app import app, init_db
+    init_db()
+    # Chạy không debug khi dùng ngrok
+    app.run(port=5000, debug=False, use_reloader=False)
+
+
+if __name__ == '__main__':
+    print("=" * 55)
+    print("  TASKFLOW - CHIA SE LEN INTERNET QUA NGROK")
+    print("=" * 55)
+
+    # Cấu hình ngrok
+    if NGROK_TOKEN and NGROK_TOKEN != "DIEN_TOKEN_CUA_BAN_VAO_DAY":
+        conf.get_default().auth_token = NGROK_TOKEN
+
+    # Khởi động Flask trong thread riêng
+    flask_thread = threading.Thread(target=start_server, daemon=True)
+    flask_thread.start()
+    time.sleep(2)  # Chờ Flask khởi động
+
+    # Mở tunnel ngrok
+    try:
+        tunnel = ngrok.connect(5000, "http")
+        public_url = tunnel.public_url
+
+        print()
+        print("[OK] SERVER DANG CHAY!")
+        print()
+        print("  Link chia se cho thanh vien:")
+        print(f"  --> {public_url}")
+        print()
+        print("  Thanh vien chi can mo link tren va:")
+        print("  - Dang ky tai khoan moi")
+        print("  - Hoac dung tai khoan co san")
+        print()
+        print("  [Nhan Ctrl+C de dung server]")
+        print("=" * 55)
+
+        # Giữ chương trình chạy
+        ngrok_process = ngrok.get_ngrok_process()
+        ngrok_process.proc.wait()
+
+    except KeyboardInterrupt:
+        print("\n[STOP] Da dung server.")
+        ngrok.kill()
+    except Exception as e:
+        print(f"\n[LOI] {e}")
+        print()
+        print(">>> KIEM TRA:")
+        print("    1. Ban da dien NGROK_TOKEN chua?")
+        print("    2. Lay token tai: https://dashboard.ngrok.com")
+        print()
+        print(">>> THAY THE: Chay khong can ngrok (chi LAN):")
+        print("    python app.py")
+        print("    → Chia se IP: http://10.63.139.112:5000")
