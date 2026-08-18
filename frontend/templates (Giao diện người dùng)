@@ -1,0 +1,1666 @@
+1 Base.html
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Quản Lý Dự Án Nhóm{% endblock %} | TaskFlow</title>
+  <meta name="description" content="Hệ thống quản lý dự án nhóm thông minh tích hợp AI – Nhóm 02" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="flash-container" id="flash-container">
+      {% for category, message in messages %}
+      <div class="flash-msg {{ category }}" onclick="this.remove()">
+        <span class="flash-icon">
+          {% if category == 'success' %}✅
+          {% elif category == 'danger' %}❌
+          {% elif category == 'warning' %}⚠️
+          {% else %}ℹ️{% endif %}
+        </span>
+        <span>{{ message }}</span>
+        <button class="flash-close" onclick="event.stopPropagation();this.parentElement.remove()">×</button>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  {% endwith %}
+
+  {% block body %}{% endblock %}
+
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>
+
+
+
+
+
+2. index.html
+{% extends "layout.html" %}
+{% block title %}Trang chủ{% endblock %}
+
+{% block content %}
+
+<div class="topbar">
+  <div>
+    <h1 class="page-title">Xin chào, <span>{{ ten_user }}!</span> 👋</h1>
+    <p class="page-subtitle">Tổng quan hoạt động nhóm hôm nay</p>
+  </div>
+  <a href="{{ url_for('project_add') }}" class="btn btn-primary">＋ Tạo dự án</a>
+</div>
+
+<!--  THỐNG KÊ  -->
+<div class="stats-grid">
+  <div class="stat-card purple">
+    <div class="stat-icon">📁</div>
+    <div class="stat-value">{{ tong_du_an }}</div>
+    <div class="stat-label">Tổng dự án</div>
+  </div>
+  <div class="stat-card blue">
+    <div class="stat-icon">📋</div>
+    <div class="stat-value">{{ tong_nhiem_vu }}</div>
+    <div class="stat-label">Nhiệm vụ của tôi</div>
+  </div>
+  <div class="stat-card green">
+    <div class="stat-icon">✅</div>
+    <div class="stat-value">{{ nhiem_vu_xong }}</div>
+    <div class="stat-label">Đã hoàn thành</div>
+  </div>
+  <div class="stat-card pink">
+    <div class="stat-icon">▶</div>
+    <div class="stat-value">{{ nhiem_vu_dang }}</div>
+    <div class="stat-label">Đang làm</div>
+  </div>
+</div>
+
+<!--  NỘI DUNG CHÍNH  -->
+<div class="two-col">
+
+  <!-- Dự án gần đây -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">📁 Dự án gần đây</span>
+      <a href="{{ url_for('projects_list') }}" class="btn btn-outline btn-sm">Xem tất cả</a>
+    </div>
+    <div class="card-body">
+      {% if projects %}
+      <ul class="project-list">
+        {% for p in projects %}
+        {% set pct = ((p.da_xong or 0) / (p.tong_nhiem_vu or 1) * 100) | int %}
+        {% set colors = ['#6c63ff','#43e97b','#ff6584','#38bdf8','#ffd166','#a78bfa'] %}
+        <li>
+          <a href="{{ url_for('project_detail', project_id=p.id) }}" class="project-item">
+            <div class="project-color"
+                 style="background:{{ colors[loop.index0 % colors|length] }}"></div>
+            <div class="project-info">
+              <div class="project-name">{{ p.ten_du_an }}</div>
+              <div class="project-meta">
+                👤 {{ p.ten_nguoi_tao }} &nbsp;·&nbsp;
+                📋 {{ p.tong_nhiem_vu }} nhiệm vụ &nbsp;·&nbsp;
+                ✅ {{ p.da_xong or 0 }} xong
+              </div>
+              <div class="progress-wrap">
+                <div class="progress-bar-bg">
+                  <div class="progress-bar-fill" style="width:{{ pct }}%"></div>
+                </div>
+              </div>
+            </div>
+            <span style="font-size:12px;color:var(--text-muted);font-weight:700">{{ pct }}%</span>
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <div class="empty-state">
+        <div class="empty-state-icon">📂</div>
+        <div class="empty-state-title">Chưa có dự án nào</div>
+        <p class="empty-state-desc" style="margin-bottom:16px">Tạo dự án đầu tiên ngay!</p>
+        <a href="{{ url_for('project_add') }}" class="btn btn-primary btn-sm">＋ Tạo dự án</a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Nhiệm vụ của tôi -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">✅ Nhiệm vụ của tôi</span>
+      <a href="{{ url_for('tasks_page') }}" class="btn btn-outline btn-sm">Xem tất cả</a>
+    </div>
+    <div class="card-body">
+      {% if my_tasks %}
+      <div class="task-list">
+        {% for t in my_tasks %}
+        <div class="task-item">
+          <div class="task-check {{ t.trang_thai }}">
+            {% if t.trang_thai == 'xong' %}✓{% elif t.trang_thai == 'dang_lam' %}⟳{% endif %}
+          </div>
+          <div class="task-info">
+            <div class="task-name {{ t.trang_thai }}">{{ t.ten_nhiem_vu }}</div>
+            <div class="task-project">📁 {{ t.ten_du_an }}</div>
+          </div>
+          {% if t.deadline %}
+          <span class="task-deadline">📅 {{ t.deadline }}</span>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <div class="empty-state-icon">🎉</div>
+        <div class="empty-state-title">Không có nhiệm vụ!</div>
+        <p class="empty-state-desc">Bạn chưa được phân công nhiệm vụ nào.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<!--  BANNER AI  -->
+<div style="margin-top:24px;padding:20px 24px;
+            background:linear-gradient(135deg,rgba(108,99,255,.15),rgba(67,233,123,.08));
+            border:1px solid rgba(108,99,255,.25);border-radius:var(--radius-lg);
+            display:flex;align-items:center;gap:16px">
+  <span style="font-size:36px">🤖</span>
+  <div>
+    <div style="font-weight:700;font-size:15px">Tính năng AI gợi ý nhiệm vụ – Tuần 5</div>
+    <div style="font-size:13px;color:var(--text-muted);margin-top:3px">
+      Nhập mô tả dự án → AI tự động tạo danh sách nhiệm vụ. Biểu đồ tiến độ ra mắt Tuần 6!
+    </div>
+  </div>
+  <span class="badge badge-dang_lam" style="margin-left:auto;white-space:nowrap">Đang phát triển</span>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+window.addEventListener('load', function() {
+  document.querySelectorAll('.progress-bar-fill').forEach(function(b) {
+    var w = b.style.width; b.style.width = '0';
+    setTimeout(function() { b.style.width = w; }, 200);
+  });
+});
+</script>
+{% endblock %}
+
+
+
+
+3. layout.html
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}TaskFlow{% endblock %} | Quản Lý Dự Án</title>
+  <meta name="description" content="Hệ thống quản lý dự án nhóm thông minh – Nhóm 02" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  {% block extra_head %}{% endblock %}
+</head>
+
+<body>
+
+  <!--  FLASH MESSAGES  -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="flash-container" id="flash-container">
+    {% for category, message in messages %}
+    <div class="flash-msg {{ category }}" onclick="this.remove()">
+      <span class="flash-icon">{% if category == 'success' %}✅{% elif category == 'danger' %}❌{% elif category ==
+        'warning' %}⚠️{% else %}ℹ️{% endif %}</span>
+      <span>{{ message }}</span>
+      <button class="flash-close" onclick="event.stopPropagation();this.parentElement.remove()">×</button>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% endwith %}
+
+  <!--  SIDEBAR  -->
+  <nav class="sidebar" id="sidebar">
+    <a href="{{ url_for('index') }}" class="sidebar-logo">
+      <div class="logo-icon">📋</div>
+      <div>
+        <span>TaskFlow</span>
+        <small>Nhóm 02</small>
+      </div>
+    </a>
+
+    <span class="nav-section-title">Menu chính</span>
+    <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">
+      <span class="nav-icon">🏠</span> Trang chủ
+    </a>
+    <a href="{{ url_for('tasks_page') }}" class="nav-link {% if request.endpoint == 'tasks_page' %}active{% endif %}">
+      <span class="nav-icon">✅</span> Quản lý công việc
+    </a>
+
+    <span class="nav-section-title">Sắp có</span>
+    <a href="#" class="nav-link" style="opacity:.4;pointer-events:none">
+      <span class="nav-icon">📁</span> Dự án
+    </a>
+    <a href="#" class="nav-link" style="opacity:.4;pointer-events:none">
+      <span class="nav-icon">📊</span> Biểu đồ tiến độ
+    </a>
+    <a href="#" class="nav-link" style="opacity:.4;pointer-events:none">
+      <span class="nav-icon">🤖</span> AI gợi ý
+    </a>
+
+    <div class="sidebar-footer">
+      <div class="user-chip">
+        <div class="user-avatar">{{ ten_user[0] | upper if ten_user else 'U' }}</div>
+        <div class="user-chip-info">
+          <div class="user-chip-name">{{ ten_user or 'Người dùng' }}</div>
+          <div class="user-chip-role">Thành viên</div>
+        </div>
+      </div>
+      <a href="{{ url_for('logout') }}" class="nav-link" style="margin-top:8px;color:#ff6584">
+        <span class="nav-icon">🚪</span> Đăng xuất
+      </a>
+    </div>
+  </nav>
+
+  <!--  NỘI DUNG CHÍNH  -->
+  <main class="main-content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  {% block extra_js %}{% endblock %}
+</body>
+
+</html>
+
+
+
+
+4. login.html
+
+{% extends "base.html" %}
+{% block title %}Đăng nhập{% endblock %}
+
+{% block body %}
+<div class="auth-page">
+
+  <!--  CỘT TRÁI – MINH HOẠ  -->
+  <div class="auth-left">
+    <div class="auth-left-content">
+      <a href="#" class="auth-brand">
+        <div class="auth-brand-icon">📋</div>
+        <span class="auth-brand-name">TaskFlow</span>
+      </a>
+
+      <div class="auth-illustration">🚀</div>
+
+      <h1 class="auth-tagline">
+        Quản lý dự án<br/>
+        <span>thông minh hơn</span>
+      </h1>
+      <p class="auth-description">
+        Hệ thống quản lý dự án nhóm tích hợp AI –<br/>
+        phân công, theo dõi tiến độ và cảnh báo deadline<br/>
+        chỉ trong một nơi duy nhất.
+      </p>
+
+      <div class="feature-chips">
+        <span class="feature-chip">📁 Quản lý dự án</span>
+        <span class="feature-chip">✅ Giao việc nhóm</span>
+        <span class="feature-chip">📊 Biểu đồ tiến độ</span>
+        <span class="feature-chip">🤖 AI gợi ý</span>
+        <span class="feature-chip">⏰ Cảnh báo hạn</span>
+      </div>
+    </div>
+  </div>
+
+  <!--  CỘT PHẢI – FORM ĐĂNG NHẬP  -->
+  <div class="auth-right">
+    <div class="auth-form-wrap">
+      <h2 class="auth-form-title">Chào mừng trở lại! 👋</h2>
+      <p class="auth-form-sub">Đăng nhập để tiếp tục quản lý dự án của bạn</p>
+
+      <form method="POST" action="{{ url_for('login') }}" id="login-form" novalidate>
+
+        <!-- Email -->
+        <div class="form-group">
+          <label class="form-label" for="email">📧 Địa chỉ Email</label>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            class="form-control"
+            placeholder="example@email.com"
+            value="{{ email or '' }}"
+            required
+            autocomplete="email"
+          />
+        </div>
+
+        <!-- Mật khẩu -->
+        <div class="form-group">
+          <label class="form-label" for="mat_khau">🔒 Mật khẩu</label>
+          <div class="input-group">
+            <input
+              type="password"
+              id="mat_khau"
+              name="mat_khau"
+              class="form-control"
+              placeholder="Nhập mật khẩu..."
+              required
+              autocomplete="current-password"
+            />
+            <button type="button" class="input-toggle" id="toggle-pw"
+                    onclick="togglePassword('mat_khau','toggle-pw')"
+                    aria-label="Hiện/ẩn mật khẩu">👁️</button>
+          </div>
+        </div>
+
+        <!-- Nút đăng nhập -->
+        <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;padding:13px;" id="btn-login">
+          🔑 Đăng nhập
+        </button>
+
+      </form>
+
+      <div class="auth-divider">hoặc</div>
+
+      <p class="auth-footer-link">
+        Chưa có tài khoản?
+        <a href="{{ url_for('register') }}">Đăng ký ngay →</a>
+      </p>
+
+      <!-- Gợi ý tài khoản demo -->
+      <div style="margin-top:24px;padding:14px;background:rgba(108,99,255,.08);border:1px solid rgba(108,99,255,.2);border-radius:10px;font-size:12px;color:var(--text-muted);">
+        <strong style="color:var(--primary-light)">🧪 Tài khoản thử nghiệm:</strong><br/>
+        📧 Email: <code style="color:var(--accent)">lyha@email.com</code><br/>
+        🔒 Mật khẩu: Hãy đăng ký tài khoản mới để trải nghiệm
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+
+
+5. 5. project_detail.html
+{% extends "layout.html" %}
+{% block title %}{{ project.ten_du_an }}{% endblock %}
+
+{% block content %}
+
+<!--  BREADCRUMB  -->
+<div style="display:flex;align-items:center;gap:8px;font-size:13px;
+            color:var(--text-muted);margin-bottom:20px">
+  <a href="{{ url_for('projects_list') }}"
+     style="color:var(--primary-light);text-decoration:none">📁 Dự án</a>
+  <span>›</span>
+  <span style="color:var(--text-white)">{{ project.ten_du_an }}</span>
+</div>
+
+<!--  TOPBAR  -->
+<div class="topbar">
+  <div>
+    <h1 class="page-title">{{ project.ten_du_an }}</h1>
+    <p class="page-subtitle">
+      👤 {{ ten_nguoi_tao }}
+      {% if project.ngay_bat_dau %} &nbsp;·&nbsp; 🗓 {{ project.ngay_bat_dau }}{% endif %}
+      {% if project.ngay_ket_thuc %} → {{ project.ngay_ket_thuc }}{% endif %}
+    </p>
+  </div>
+  <div style="display:flex;gap:8px">
+    <a href="{{ url_for('task_add', project_id=project.id) }}"
+       class="btn btn-primary" id="btn-add-task-detail">
+      ＋ Thêm nhiệm vụ
+    </a>
+    <a href="{{ url_for('project_edit', project_id=project.id) }}"
+       class="btn btn-outline">✏️ Sửa dự án</a>
+    <form method="POST" action="{{ url_for('project_delete', project_id=project.id) }}"
+          onsubmit="return confirm('Xac nhan xoa du an nay?\nToan bo nhiem vu cung se bi xoa!')">
+      <button type="submit" class="btn btn-danger">🗑️</button>
+    </form>
+  </div>
+</div>
+
+<!--  THỐNG KÊ NHANH  -->
+<div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px">
+  <div class="stat-card blue">
+    <div class="stat-icon">📋</div>
+    <div class="stat-value">{{ tong }}</div>
+    <div class="stat-label">Tổng nhiệm vụ</div>
+  </div>
+  <div class="stat-card green">
+    <div class="stat-icon">✅</div>
+    <div class="stat-value">{{ xong }}</div>
+    <div class="stat-label">Đã xong</div>
+  </div>
+  <div class="stat-card purple">
+    <div class="stat-icon">▶</div>
+    <div class="stat-value">{{ dang }}</div>
+    <div class="stat-label">Đang làm</div>
+  </div>
+  <div class="stat-card pink">
+    <div class="stat-icon">⏸</div>
+    <div class="stat-value">{{ chua }}</div>
+    <div class="stat-label">Chưa làm</div>
+  </div>
+</div>
+
+<!--  THANH TIẾN ĐỘ TỔNG  -->
+<div class="card" style="margin-bottom:24px">
+  <div class="card-body" style="padding:16px 22px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <span style="font-size:14px;font-weight:600">📊 Tiến độ tổng thể</span>
+      <span style="font-size:24px;font-weight:800;color:var(--primary-light)">{{ pct }}%</span>
+    </div>
+    <div class="progress-bar-bg" style="height:10px">
+      <div class="progress-bar-fill" style="width:{{ pct }}%;height:10px"></div>
+    </div>
+    {% if project.mo_ta %}
+    <p style="font-size:13px;color:var(--text-muted);margin-top:10px;margin-bottom:0">
+      📝 {{ project.mo_ta }}
+    </p>
+    {% endif %}
+  </div>
+</div>
+
+<!--  DANH SÁCH NHIỆM VỤ  -->
+<div class="card">
+  <div class="card-header">
+    <span class="card-title">✅ Danh sách nhiệm vụ</span>
+    <a href="{{ url_for('task_add', project_id=project.id) }}"
+       class="btn btn-primary btn-sm">＋ Thêm</a>
+  </div>
+
+  {% if tasks %}
+  <div class="table-wrapper">
+    <table id="tasks-table">
+      <thead>
+        <tr>
+          <th>Trạng thái</th>
+          <th>Tên nhiệm vụ</th>
+          <th>Người phụ trách</th>
+          <th>Deadline</th>
+          <th>Hành động</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tasks %}
+        <tr id="row-{{ t.id }}">
+          <td>
+            <!-- Dropdown đổi trạng thái nhanh -->
+            <select class="status-select"
+                    data-id="{{ t.id }}"
+                    onchange="updateStatus({{ t.id }}, this.value)"
+                    style="background:transparent;border:none;font-size:12px;
+                           font-weight:600;cursor:pointer;outline:none;
+                           padding:4px 6px;border-radius:99px;">
+              <option value="chua_lam" {% if t.trang_thai == 'chua_lam' %}selected{% endif %}
+                      style="background:#1a1927">⏸ Chưa làm</option>
+              <option value="dang_lam" {% if t.trang_thai == 'dang_lam' %}selected{% endif %}
+                      style="background:#1a1927">▶ Đang làm</option>
+              <option value="xong"     {% if t.trang_thai == 'xong'     %}selected{% endif %}
+                      style="background:#1a1927">✅ Xong</option>
+            </select>
+          </td>
+          <td>
+            <div style="font-weight:600;font-size:13px
+                        {% if t.trang_thai == 'xong' %};text-decoration:line-through;
+                        color:var(--text-muted){% endif %}" id="name-{{ t.id }}">
+              {{ t.ten_nhiem_vu }}
+            </div>
+            {% if t.mo_ta %}
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px">
+              {{ t.mo_ta[:60] }}{% if t.mo_ta|length > 60 %}...{% endif %}
+            </div>
+            {% endif %}
+          </td>
+          <td>
+            {% if t.ten_phu_trach %}
+            <div style="display:flex;align-items:center;gap:6px">
+              <div style="width:26px;height:26px;border-radius:50%;
+                          background:linear-gradient(135deg,var(--primary),var(--secondary));
+                          display:grid;place-items:center;font-size:12px;font-weight:700">
+                {{ t.ten_phu_trach[0] | upper }}
+              </div>
+              <span style="font-size:13px">{{ t.ten_phu_trach }}</span>
+            </div>
+            {% else %}
+            <span style="font-size:12px;color:var(--text-sub)">— Chưa phân công</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if t.deadline %}
+            <span class="task-deadline {% if t.deadline < today and t.trang_thai != 'xong' %}overdue{% endif %}">
+              📅 {{ t.deadline }}
+            </span>
+            {% else %}
+            <span style="color:var(--text-sub);font-size:12px">—</span>
+            {% endif %}
+          </td>
+          <td>
+            <div style="display:flex;gap:6px">
+              <a href="{{ url_for('task_edit', task_id=t.id) }}"
+                 class="btn btn-outline btn-sm" title="Sửa nhiệm vụ">✏️</a>
+              <form method="POST" action="{{ url_for('task_delete', task_id=t.id) }}"
+                    onsubmit="return confirm('Xac nhan xoa nhiem vu nay?')">
+                <button type="submit" class="btn btn-danger btn-sm" title="Xóa">🗑️</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% else %}
+  <div class="card-body">
+    <div class="empty-state" style="padding:48px">
+      <div class="empty-state-icon">📭</div>
+      <div class="empty-state-title">Dự án này chưa có nhiệm vụ nào</div>
+      <p class="empty-state-desc" style="margin-bottom:20px">
+        Thêm nhiệm vụ đầu tiên để bắt đầu theo dõi tiến độ
+      </p>
+      <a href="{{ url_for('task_add', project_id=project.id) }}"
+         class="btn btn-primary">＋ Thêm nhiệm vụ đầu tiên</a>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var today = "{{ today }}";
+
+// Tô màu select theo trạng thái
+function colorSelect(sel) {
+  var colors = {
+    chua_lam: 'rgba(255,255,255,.1)',
+    dang_lam: 'rgba(255,209,102,.15)',
+    xong:     'rgba(67,233,123,.15)'
+  };
+  var textColors = {
+    chua_lam: 'var(--text-muted)',
+    dang_lam: 'var(--warning)',
+    xong:     'var(--accent)'
+  };
+  sel.style.background = colors[sel.value] || colors.chua_lam;
+  sel.style.color = textColors[sel.value] || textColors.chua_lam;
+}
+
+document.querySelectorAll('.status-select').forEach(colorSelect);
+
+// Đổi trạng thái nhanh qua AJAX
+function updateStatus(taskId, status) {
+  var form = new FormData();
+  form.append('trang_thai', status);
+
+  fetch('/nhiem-vu/' + taskId + '/trang-thai', { method:'POST', body: form })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.ok) {
+        // Tô màu select
+        var sel = document.querySelector('.status-select[data-id="' + taskId + '"]');
+        if (sel) colorSelect(sel);
+        // Gạch tên nếu xong
+        var nameEl = document.getElementById('name-' + taskId);
+        if (nameEl) {
+          if (status === 'xong') {
+            nameEl.style.textDecoration = 'line-through';
+            nameEl.style.color = 'var(--text-muted)';
+          } else {
+            nameEl.style.textDecoration = '';
+            nameEl.style.color = '';
+          }
+        }
+      }
+    });
+}
+
+// Progress bar animation
+window.addEventListener('load', function() {
+  document.querySelectorAll('.progress-bar-fill').forEach(function(b) {
+    var w = b.style.width; b.style.width = '0';
+    setTimeout(function() { b.style.width = w; }, 200);
+  });
+});
+</script>
+{% endblock %}
+
+
+
+
+
+
+
+.project_form.html
+{% extends "layout.html" %}
+{% block title %}{% if action == 'add' %}Tạo dự án mới{% else %}Sửa dự án{% endif %}{% endblock %}
+
+{% block content %}
+
+<!--  TOPBAR  -->
+<div class="topbar">
+  <div>
+    <h1 class="page-title">
+      {% if action == 'add' %}➕ Tạo <span>dự án mới</span>
+      {% else %}✏️ Sửa <span>dự án</span>{% endif %}
+    </h1>
+    <p class="page-subtitle">
+      {% if action == 'add' %}Điền thông tin để bắt đầu dự án nhóm
+      {% else %}Cập nhật thông tin dự án "{{ project.ten_du_an }}"{% endif %}
+    </p>
+  </div>
+  <a href="{{ url_for('projects_list') }}" class="btn btn-outline">← Quay lại</a>
+</div>
+
+<!--  FORM  -->
+<div style="display:grid;grid-template-columns:1fr 380px;gap:24px;align-items:start">
+
+  <!-- CỘT TRÁI: Form chính -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">
+        {% if action == 'add' %}📋 Thông tin dự án mới{% else %}📋 Chỉnh sửa thông tin{% endif %}
+      </span>
+    </div>
+    <div class="card-body">
+      <form method="POST"
+            action="{% if action == 'add' %}{{ url_for('project_add') }}
+                    {% else %}{{ url_for('project_edit', project_id=project.id) }}{% endif %}"
+            id="project-form" novalidate>
+
+        <!-- Tên dự án -->
+        <div class="form-group">
+          <label class="form-label" for="ten_du_an">
+            📁 Tên dự án <span style="color:var(--danger)">*</span>
+          </label>
+          <input type="text" id="ten_du_an" name="ten_du_an"
+                 class="form-control"
+                 placeholder="VD: Hệ thống quản lý bán hàng..."
+                 value="{{ project.ten_du_an if action == 'edit' else (form_data.ten_du_an if form_data else '') }}"
+                 required maxlength="200"
+                 oninput="updateCounter(this, 200, 'cnt-ten')" />
+          <div style="display:flex;justify-content:space-between;margin-top:4px">
+            <span style="font-size:11px;color:var(--text-sub)">Bắt buộc</span>
+            <span id="cnt-ten" style="font-size:11px;color:var(--text-sub)">0/200</span>
+          </div>
+        </div>
+
+        <!-- Mô tả -->
+        <div class="form-group">
+          <label class="form-label" for="mo_ta">📝 Mô tả dự án</label>
+          <textarea id="mo_ta" name="mo_ta" class="form-control"
+                    rows="4"
+                    placeholder="Mô tả mục tiêu, phạm vi, công nghệ sử dụng..."
+                    maxlength="1000"
+                    oninput="updateCounter(this, 1000, 'cnt-mo-ta')"
+                    style="resize:vertical">{{ project.mo_ta if action == 'edit' else (form_data.mo_ta if form_data else '') }}</textarea>
+          <div style="display:flex;justify-content:flex-end;margin-top:4px">
+            <span id="cnt-mo-ta" style="font-size:11px;color:var(--text-sub)">0/1000</span>
+          </div>
+        </div>
+
+        <!-- Ngày tháng -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <div class="form-group">
+            <label class="form-label" for="ngay_bat_dau">🗓 Ngày bắt đầu</label>
+            <input type="date" id="ngay_bat_dau" name="ngay_bat_dau"
+                   class="form-control"
+                   value="{{ project.ngay_bat_dau if action == 'edit' else today }}"
+                   onchange="validateDates()" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="ngay_ket_thuc">🏁 Ngày kết thúc</label>
+            <input type="date" id="ngay_ket_thuc" name="ngay_ket_thuc"
+                   class="form-control"
+                   value="{{ project.ngay_ket_thuc if action == 'edit' else '' }}"
+                   onchange="validateDates()" />
+          </div>
+        </div>
+        <p id="date-error" style="font-size:12px;color:var(--danger);display:none;margin-top:-10px;margin-bottom:12px">
+          ❌ Ngày kết thúc phải sau ngày bắt đầu
+        </p>
+
+        <!-- Nút submit -->
+        <div style="display:flex;gap:10px;margin-top:8px">
+          <button type="submit" class="btn btn-primary" id="btn-submit"
+                  style="flex:1;justify-content:center;padding:13px">
+            {% if action == 'add' %}🚀 Tạo dự án{% else %}💾 Lưu thay đổi{% endif %}
+          </button>
+          <a href="{{ url_for('projects_list') }}" class="btn btn-outline"
+             style="padding:13px 20px">Hủy</a>
+        </div>
+
+      </form>
+    </div>
+  </div>
+
+  <!-- CỘT PHẢI: Hướng dẫn & Preview -->
+  <div style="display:flex;flex-direction:column;gap:16px">
+
+    <!-- Tips -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">💡 Gợi ý đặt tên</span>
+      </div>
+      <div class="card-body" style="padding:16px">
+        <div style="display:flex;flex-direction:column;gap:8px;font-size:13px">
+          <div style="padding:8px 12px;background:rgba(108,99,255,.1);border-radius:8px;
+                      border-left:3px solid var(--primary)">
+            📱 Ứng dụng quản lý bán hàng
+          </div>
+          <div style="padding:8px 12px;background:rgba(67,233,123,.1);border-radius:8px;
+                      border-left:3px solid var(--accent)">
+            🌐 Website giới thiệu công ty
+          </div>
+          <div style="padding:8px 12px;background:rgba(255,101,132,.1);border-radius:8px;
+                      border-left:3px solid var(--secondary)">
+            📊 Hệ thống báo cáo nội bộ
+          </div>
+          <div style="padding:8px 12px;background:rgba(255,209,102,.1);border-radius:8px;
+                      border-left:3px solid var(--warning)">
+            🎓 Đồ án tốt nghiệp nhóm
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Preview card -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">👁 Xem trước</span>
+      </div>
+      <div class="card-body" style="padding:16px">
+        <div style="border-radius:10px;overflow:hidden;border:1px solid var(--glass-border)">
+          <div id="preview-color" style="height:5px;background:var(--primary)"></div>
+          <div style="padding:12px">
+            <div id="preview-name"
+                 style="font-size:14px;font-weight:700;color:var(--text-white);margin-bottom:6px">
+              {{ project.ten_du_an if action == 'edit' else 'Tên dự án...' }}
+            </div>
+            <div id="preview-desc"
+                 style="font-size:12px;color:var(--text-muted);margin-bottom:10px;
+                        min-height:20px">
+              {{ project.mo_ta if (action == 'edit' and project.mo_ta) else 'Mô tả dự án...' }}
+            </div>
+            <div style="display:flex;gap:8px">
+              <span style="font-size:11px;padding:3px 8px;border-radius:99px;
+                           background:rgba(108,99,255,.15);color:var(--primary-light)">
+                0 nhiệm vụ
+              </span>
+              <span style="font-size:11px;padding:3px 8px;border-radius:99px;
+                           background:rgba(67,233,123,.15);color:var(--accent)">
+                0% xong
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lưu ý -->
+    <div style="padding:14px;background:rgba(56,189,248,.08);
+                border:1px solid rgba(56,189,248,.2);border-radius:12px;
+                font-size:12px;color:var(--text-muted)">
+      ℹ️ <strong style="color:#7dd3fc">Lưu ý:</strong><br/>
+      Sau khi tạo dự án, bạn có thể thêm nhiệm vụ và phân công cho các thành viên trong nhóm.
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Đếm ký tự
+function updateCounter(el, max, id) {
+  var cnt = document.getElementById(id);
+  if (cnt) cnt.textContent = el.value.length + '/' + max;
+}
+
+// Preview realtime
+var nameEl = document.getElementById('ten_du_an');
+var descEl = document.getElementById('mo_ta');
+var pName  = document.getElementById('preview-name');
+var pDesc  = document.getElementById('preview-desc');
+
+if (nameEl) {
+  // Init counters
+  updateCounter(nameEl, 200, 'cnt-ten');
+  nameEl.addEventListener('input', function() {
+    pName.textContent = this.value || 'Tên dự án...';
+    updateCounter(this, 200, 'cnt-ten');
+  });
+}
+if (descEl) {
+  updateCounter(descEl, 1000, 'cnt-mo-ta');
+  descEl.addEventListener('input', function() {
+    pDesc.textContent = this.value || 'Mô tả dự án...';
+    updateCounter(this, 1000, 'cnt-mo-ta');
+  });
+}
+
+// Validate ngày
+function validateDates() {
+  var start = document.getElementById('ngay_bat_dau').value;
+  var end   = document.getElementById('ngay_ket_thuc').value;
+  var err   = document.getElementById('date-error');
+  var btn   = document.getElementById('btn-submit');
+  if (start && end && start > end) {
+    err.style.display = 'block';
+    btn.disabled = true;
+    btn.style.opacity = '.5';
+  } else {
+    err.style.display = 'none';
+    btn.disabled = false;
+    btn.style.opacity = '';
+  }
+}
+</script>
+{% endblock %}
+
+
+
+
+
+
+
+
+project.html
+
+{% extends "layout.html" %}
+{% block title %}Dự án{% endblock %}
+
+{% block content %}
+
+<!--  TOPBAR  -->
+<div class="topbar">
+  <div>
+    <h1 class="page-title">📁 Quản lý <span>Dự án</span></h1>
+    <p class="page-subtitle">Tất cả dự án của nhóm ({{ projects|length }} dự án)</p>
+  </div>
+  <a href="{{ url_for('project_add') }}" class="btn btn-primary" id="btn-add-project">
+    ＋ Tạo dự án mới
+  </a>
+</div>
+
+<!--  GRID DỰ ÁN  -->
+{% if projects %}
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:18px;">
+
+  {% for p in projects %}
+  {% set pct = ((p.da_xong or 0) / (p.tong_nhiem_vu or 1) * 100) | int %}
+  {% set colors = ['#6c63ff','#43e97b','#ff6584','#38bdf8','#ffd166','#a78bfa'] %}
+  {% set color  = colors[loop.index0 % colors|length] %}
+
+  <div class="card" style="transition:transform .25s,border-color .25s;cursor:default"
+       onmouseenter="this.style.transform='translateY(-4px)';this.style.borderColor='{{ color }}44'"
+       onmouseleave="this.style.transform='';this.style.borderColor=''">
+
+    <!-- Header màu -->
+    <div style="height:5px;background:{{ color }};border-radius:var(--radius-lg) var(--radius-lg) 0 0"></div>
+
+    <div class="card-body" style="padding:18px 20px">
+
+      <!-- Tên & ngày -->
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px">
+        <h3 style="font-size:16px;font-weight:700;line-height:1.3;margin:0">
+          {{ p.ten_du_an }}
+        </h3>
+        {% if p.ngay_ket_thuc %}
+        <span style="font-size:11px;padding:3px 9px;border-radius:99px;
+                     background:rgba(255,255,255,.08);color:var(--text-muted);
+                     white-space:nowrap;flex-shrink:0">
+          📅 {{ p.ngay_ket_thuc }}
+        </span>
+        {% endif %}
+      </div>
+
+      <!-- Mô tả -->
+      {% if p.mo_ta %}
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;
+                line-height:1.5;overflow:hidden;display:-webkit-box;
+                -webkit-line-clamp:2;-webkit-box-orient:vertical">
+        {{ p.mo_ta }}
+      </p>
+      {% endif %}
+
+      <!-- Thống kê -->
+      <div style="display:flex;gap:12px;margin-bottom:12px">
+        <div style="text-align:center">
+          <div style="font-size:20px;font-weight:800;color:var(--text-white)">{{ p.tong_nhiem_vu or 0 }}</div>
+          <div style="font-size:10px;color:var(--text-muted)">Tổng</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:20px;font-weight:800;color:#43e97b">{{ p.da_xong or 0 }}</div>
+          <div style="font-size:10px;color:var(--text-muted)">Xong</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:20px;font-weight:800;color:#ffd166">{{ p.dang_lam or 0 }}</div>
+          <div style="font-size:10px;color:var(--text-muted)">Đang làm</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:20px;font-weight:800;color:var(--text-sub)">{{ p.chua_lam or 0 }}</div>
+          <div style="font-size:10px;color:var(--text-muted)">Chưa làm</div>
+        </div>
+      </div>
+
+      <!-- Progress bar -->
+      <div style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;
+                    color:var(--text-muted);margin-bottom:5px">
+          <span>Tiến độ</span>
+          <span style="font-weight:700;color:{{ color }}">{{ pct }}%</span>
+        </div>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" style="width:{{ pct }}%;
+               background:linear-gradient(90deg,{{ color }},{{ color }}aa)"></div>
+        </div>
+      </div>
+
+      <!-- Người tạo -->
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">
+        👤 {{ p.ten_nguoi_tao }}
+        {% if p.ngay_bat_dau %}
+        &nbsp;·&nbsp; 🗓 {{ p.ngay_bat_dau }}
+        {% endif %}
+      </div>
+
+      <!-- Nút hành động -->
+      <div style="display:flex;gap:8px">
+        <a href="{{ url_for('project_detail', project_id=p.id) }}"
+           class="btn btn-primary btn-sm" style="flex:1;justify-content:center">
+          👁 Xem chi tiết
+        </a>
+        <a href="{{ url_for('project_edit', project_id=p.id) }}"
+           class="btn btn-outline btn-sm" title="Sửa dự án">✏️</a>
+        <form method="POST" action="{{ url_for('project_delete', project_id=p.id) }}"
+              onsubmit="return confirm('Xac nhan xoa du an &quot;{{ p.ten_du_an }}&quot;?\nToan bo nhiem vu ben trong cung se bi xoa!')">
+          <button type="submit" class="btn btn-danger btn-sm" title="Xóa dự án">🗑️</button>
+        </form>
+      </div>
+
+    </div>
+  </div>
+  {% endfor %}
+
+</div>
+
+{% else %}
+<!-- Empty state -->
+<div class="card">
+  <div class="card-body">
+    <div class="empty-state" style="padding:80px 24px">
+      <div class="empty-state-icon">📂</div>
+      <div class="empty-state-title">Chưa có dự án nào</div>
+      <p class="empty-state-desc" style="margin-bottom:24px">
+        Hãy tạo dự án đầu tiên cho nhóm của bạn!
+      </p>
+      <a href="{{ url_for('project_add') }}" class="btn btn-primary">
+        ＋ Tạo dự án ngay
+      </a>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Animate progress bars on load
+window.addEventListener('load', function() {
+  document.querySelectorAll('.progress-bar-fill').forEach(function(bar) {
+    var w = bar.style.width;
+    bar.style.width = '0';
+    setTimeout(function() { bar.style.width = w; }, 150);
+  });
+});
+</script>
+{% endblock %}
+
+
+
+
+register.html
+{% extends "base.html" %}
+{% block title %}Đăng ký tài khoản{% endblock %}
+
+{% block body %}
+<div class="auth-page">
+
+  <!--  CỘT TRÁI – MINH HOẠ  -->
+  <div class="auth-left">
+    <div class="auth-left-content">
+      <a href="#" class="auth-brand">
+        <div class="auth-brand-icon">📋</div>
+        <span class="auth-brand-name">TaskFlow</span>
+      </a>
+
+      <div class="auth-illustration">🎯</div>
+
+      <h1 class="auth-tagline">
+        Bắt đầu hành trình<br/>
+        <span>cùng nhóm bạn</span>
+      </h1>
+      <p class="auth-description">
+        Tạo tài khoản miễn phí trong vài giây.<br/>
+        Không cần thẻ tín dụng – không giới hạn dự án.<br/>
+        Bắt đầu ngay hôm nay!
+      </p>
+
+      <div class="feature-chips">
+        <span class="feature-chip">🆓 Hoàn toàn miễn phí</span>
+        <span class="feature-chip">🔐 Bảo mật an toàn</span>
+        <span class="feature-chip">⚡ Thiết lập nhanh</span>
+        <span class="feature-chip">👥 Làm việc nhóm</span>
+      </div>
+    </div>
+  </div>
+
+  <!--  CỘT PHẢI – FORM ĐĂNG KÝ  -->
+  <div class="auth-right">
+    <div class="auth-form-wrap">
+      <h2 class="auth-form-title">Tạo tài khoản mới ✨</h2>
+      <p class="auth-form-sub">Điền thông tin bên dưới để bắt đầu</p>
+
+      <form method="POST" action="{{ url_for('register') }}" id="register-form" novalidate>
+
+        <!-- Họ tên -->
+        <div class="form-group">
+          <label class="form-label" for="ten">👤 Họ và tên</label>
+          <input
+            type="text"
+            id="ten"
+            name="ten"
+            class="form-control"
+            placeholder="Ví dụ: Nguyễn Văn A"
+            value="{{ ten or '' }}"
+            required
+            autocomplete="name"
+            minlength="2"
+          />
+        </div>
+
+        <!-- Email -->
+        <div class="form-group">
+          <label class="form-label" for="email">📧 Địa chỉ Email</label>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            class="form-control"
+            placeholder="example@email.com"
+            value="{{ email or '' }}"
+            required
+            autocomplete="email"
+          />
+        </div>
+
+        <!-- Mật khẩu -->
+        <div class="form-group">
+          <label class="form-label" for="mat_khau">🔒 Mật khẩu</label>
+          <div class="input-group">
+            <input
+              type="password"
+              id="mat_khau"
+              name="mat_khau"
+              class="form-control"
+              placeholder="Tối thiểu 6 ký tự"
+              required
+              minlength="6"
+              autocomplete="new-password"
+              oninput="checkStrength(this.value)"
+            />
+            <button type="button" class="input-toggle"
+                    onclick="togglePassword('mat_khau','toggle-pw1')"
+                    id="toggle-pw1" aria-label="Hiện/ẩn mật khẩu">👁️</button>
+          </div>
+          <!-- Thanh độ mạnh mật khẩu -->
+          <div class="password-strength" id="strength-wrap" style="display:none">
+            <div class="strength-bar">
+              <div class="strength-seg" id="seg1"></div>
+              <div class="strength-seg" id="seg2"></div>
+              <div class="strength-seg" id="seg3"></div>
+            </div>
+            <span class="strength-text" id="strength-text">--</span>
+          </div>
+        </div>
+
+        <!-- Xác nhận mật khẩu -->
+        <div class="form-group">
+          <label class="form-label" for="xac_nhan_mat_khau">🔒 Xác nhận mật khẩu</label>
+          <div class="input-group">
+            <input
+              type="password"
+              id="xac_nhan_mat_khau"
+              name="xac_nhan_mat_khau"
+              class="form-control"
+              placeholder="Nhập lại mật khẩu"
+              required
+              autocomplete="new-password"
+              oninput="checkConfirm()"
+            />
+            <button type="button" class="input-toggle"
+                    onclick="togglePassword('xac_nhan_mat_khau','toggle-pw2')"
+                    id="toggle-pw2" aria-label="Hiện/ẩn mật khẩu">👁️</button>
+          </div>
+          <p id="confirm-msg" style="font-size:11px;margin-top:4px;display:none"></p>
+        </div>
+
+        <!-- Nút đăng ký -->
+        <button type="submit" class="btn btn-primary"
+                style="width:100%;justify-content:center;padding:13px;"
+                id="btn-register">
+          🚀 Tạo tài khoản
+        </button>
+
+      </form>
+
+      <div class="auth-divider">đã có tài khoản?</div>
+
+      <p class="auth-footer-link">
+        <a href="{{ url_for('login') }}">← Quay lại đăng nhập</a>
+      </p>
+
+      <!-- Ghi chú bảo mật -->
+      <div style="margin-top:20px;padding:12px;background:rgba(67,233,123,.06);border:1px solid rgba(67,233,123,.15);border-radius:10px;font-size:12px;color:var(--text-muted);">
+        🔐 <strong style="color:#6effa1">Bảo mật:</strong>
+        Mật khẩu được mã hóa bằng thuật toán <code>PBKDF2-SHA256</code> trước khi lưu vào cơ sở dữ liệu. Chúng tôi không lưu mật khẩu gốc của bạn.
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Kiểm tra độ mạnh mật khẩu
+function checkStrength(val) {
+  const wrap = document.getElementById('strength-wrap');
+  const text = document.getElementById('strength-text');
+  const segs = [document.getElementById('seg1'),
+                document.getElementById('seg2'),
+                document.getElementById('seg3')];
+
+  if (!val) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+
+  let score = 0;
+  if (val.length >= 6)  score++;
+  if (val.length >= 10) score++;
+  if (/[A-Z]/.test(val) || /[0-9]/.test(val) || /[^a-zA-Z0-9]/.test(val)) score++;
+
+  const levels = ['', 'weak', 'medium', 'strong'];
+  const labels = ['', '⚠️ Yếu', '🟡 Trung bình', '✅ Mạnh'];
+
+  segs.forEach((s, i) => {
+    s.className = 'strength-seg';
+    if (i < score) s.classList.add('active', levels[score]);
+  });
+  text.textContent = labels[score] || '';
+}
+
+// Kiểm tra khớp mật khẩu
+function checkConfirm() {
+  const pw  = document.getElementById('mat_khau').value;
+  const cf  = document.getElementById('xac_nhan_mat_khau').value;
+  const msg = document.getElementById('confirm-msg');
+  if (!cf) { msg.style.display = 'none'; return; }
+  msg.style.display = 'block';
+  if (pw === cf) {
+    msg.textContent = '✅ Mật khẩu khớp';
+    msg.style.color = 'var(--accent)';
+  } else {
+    msg.textContent = '❌ Mật khẩu không khớp';
+    msg.style.color = 'var(--danger)';
+  }
+}
+</script>
+{% endblock %}
+
+
+
+
+
+
+task_form.html
+
+{% extends "layout.html" %}
+{% block title %}{% if action == 'add' %}Thêm nhiệm vụ{% else %}Sửa nhiệm vụ{% endif %}{% endblock %}
+
+{% block content %}
+
+<!--  TOPBAR  -->
+<div class="topbar">
+  <div>
+    <h1 class="page-title">
+      {% if action == 'add' %}➕ Thêm <span>nhiệm vụ mới</span>
+      {% else %}✏️ Sửa <span>nhiệm vụ</span>{% endif %}
+    </h1>
+    <p class="page-subtitle">
+      {% if action == 'add' %}Phân công công việc cho thành viên nhóm
+      {% else %}Cập nhật thông tin nhiệm vụ "{{ task.ten_nhiem_vu }}"{% endif %}
+    </p>
+  </div>
+  {% if project_id %}
+  <a href="{{ url_for('project_detail', project_id=project_id) }}"
+     class="btn btn-outline">← Quay lại dự án</a>
+  {% else %}
+  <a href="{{ url_for('tasks_page') }}" class="btn btn-outline">← Quay lại</a>
+  {% endif %}
+</div>
+
+<!--  FORM  -->
+<div style="display:grid;grid-template-columns:1fr 340px;gap:24px;align-items:start">
+
+  <!-- CỘT TRÁI: Form chính -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">📝 Thông tin nhiệm vụ</span>
+    </div>
+    <div class="card-body">
+      <form method="POST"
+            action="{% if action == 'add' %}
+                      {% if project_id %}{{ url_for('task_add', project_id=project_id) }}
+                      {% else %}{{ url_for('task_add') }}{% endif %}
+                    {% else %}{{ url_for('task_edit', task_id=task.id) }}{% endif %}"
+            id="task-form" novalidate>
+
+        <!-- Tên nhiệm vụ -->
+        <div class="form-group">
+          <label class="form-label" for="ten_nhiem_vu">
+            ✅ Tên nhiệm vụ <span style="color:var(--danger)">*</span>
+          </label>
+          <input type="text" id="ten_nhiem_vu" name="ten_nhiem_vu"
+                 class="form-control"
+                 placeholder="VD: Thiết kế màn hình đăng nhập..."
+                 value="{{ task.ten_nhiem_vu if action == 'edit' else '' }}"
+                 required maxlength="200" />
+        </div>
+
+        <!-- Mô tả nhiệm vụ -->
+        <div class="form-group">
+          <label class="form-label" for="mo_ta">📝 Mô tả chi tiết</label>
+          <textarea id="mo_ta" name="mo_ta" class="form-control"
+                    rows="3"
+                    placeholder="Mô tả yêu cầu, kết quả mong đợi..."
+                    style="resize:vertical">{{ task.mo_ta if action == 'edit' else '' }}</textarea>
+        </div>
+
+        <!-- Dự án thuộc -->
+        <div class="form-group">
+          <label class="form-label" for="du_an_id">
+            📁 Thuộc dự án <span style="color:var(--danger)">*</span>
+          </label>
+          <select id="du_an_id" name="du_an_id" class="form-control" required>
+            <option value="">— Chọn dự án —</option>
+            {% for p in projects %}
+            <option value="{{ p.id }}"
+              {% if action == 'edit' and task.du_an_id == p.id %}selected
+              {% elif project_id and project_id == p.id %}selected
+              {% endif %}>
+              {{ p.ten_du_an }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Người phụ trách & Trạng thái (2 cột) -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+
+          <div class="form-group">
+            <label class="form-label" for="phu_trach">👤 Người phụ trách</label>
+            <select id="phu_trach" name="phu_trach" class="form-control">
+              <option value="">— Chưa phân công —</option>
+              {% for u in users %}
+              <option value="{{ u.id }}"
+                {% if action == 'edit' and task.phu_trach == u.id %}selected{% endif %}>
+                {{ u.ten }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="trang_thai">🔖 Trạng thái</label>
+            <select id="trang_thai" name="trang_thai" class="form-control"
+                    onchange="colorStatusSelect(this)">
+              <option value="chua_lam"
+                {% if action == 'edit' and task.trang_thai == 'chua_lam' %}selected
+                {% elif action == 'add' %}selected{% endif %}>
+                ⏸ Chưa làm
+              </option>
+              <option value="dang_lam"
+                {% if action == 'edit' and task.trang_thai == 'dang_lam' %}selected{% endif %}>
+                ▶ Đang làm
+              </option>
+              <option value="xong"
+                {% if action == 'edit' and task.trang_thai == 'xong' %}selected{% endif %}>
+                ✅ Xong
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Deadline -->
+        <div class="form-group">
+          <label class="form-label" for="deadline">⏰ Deadline (hạn nộp)</label>
+          <input type="date" id="deadline" name="deadline"
+                 class="form-control"
+                 value="{{ task.deadline if action == 'edit' else '' }}"
+                 min="{{ today }}" />
+          <span style="font-size:11px;color:var(--text-sub);margin-top:4px;display:block">
+            Để trống nếu không có hạn cụ thể
+          </span>
+        </div>
+
+        <!-- Submit -->
+        <div style="display:flex;gap:10px;margin-top:8px">
+          <button type="submit" class="btn btn-primary"
+                  style="flex:1;justify-content:center;padding:13px">
+            {% if action == 'add' %}➕ Thêm nhiệm vụ{% else %}💾 Lưu thay đổi{% endif %}
+          </button>
+          {% if project_id %}
+          <a href="{{ url_for('project_detail', project_id=project_id) }}"
+             class="btn btn-outline" style="padding:13px 20px">Hủy</a>
+          {% else %}
+          <a href="{{ url_for('tasks_page') }}" class="btn btn-outline"
+             style="padding:13px 20px">Hủy</a>
+          {% endif %}
+        </div>
+
+      </form>
+    </div>
+  </div>
+
+  <!-- CỘT PHẢI: Hướng dẫn -->
+  <div style="display:flex;flex-direction:column;gap:16px">
+
+    <!-- Ý nghĩa trạng thái -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🔖 Ý nghĩa trạng thái</span>
+      </div>
+      <div class="card-body" style="padding:14px">
+        <div style="display:flex;flex-direction:column;gap:10px;font-size:13px">
+          <div style="display:flex;gap:10px;align-items:flex-start">
+            <span class="badge badge-chua_lam" style="flex-shrink:0">⏸ Chưa làm</span>
+            <span style="color:var(--text-muted)">Công việc chưa được bắt đầu</span>
+          </div>
+          <div style="display:flex;gap:10px;align-items:flex-start">
+            <span class="badge badge-dang_lam" style="flex-shrink:0">▶ Đang làm</span>
+            <span style="color:var(--text-muted)">Đang trong quá trình thực hiện</span>
+          </div>
+          <div style="display:flex;gap:10px;align-items:flex-start">
+            <span class="badge badge-xong" style="flex-shrink:0">✅ Xong</span>
+            <span style="color:var(--text-muted)">Hoàn thành, được tính vào tiến độ</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gợi ý đặt tên -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">💡 Gợi ý tên nhiệm vụ</span>
+      </div>
+      <div class="card-body" style="padding:14px">
+        <div style="display:flex;flex-direction:column;gap:6px;font-size:12px;
+                    color:var(--text-muted)">
+          <div>✅ Thiết kế màn hình đăng nhập</div>
+          <div>✅ Viết API endpoint GET /users</div>
+          <div>✅ Kiểm thử chức năng tìm kiếm</div>
+          <div>✅ Sửa lỗi hiển thị trên mobile</div>
+          <div>✅ Chuẩn bị dữ liệu mẫu CSV</div>
+          <div style="margin-top:8px;color:var(--danger)">❌ Làm việc (quá chung chung)</div>
+          <div style="color:var(--danger)">❌ Fix bug (không rõ bug nào)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tip deadline -->
+    <div style="padding:14px;background:rgba(255,209,102,.08);
+                border:1px solid rgba(255,209,102,.2);border-radius:12px;
+                font-size:12px;color:var(--text-muted)">
+      ⏰ <strong style="color:var(--warning)">Mẹo đặt deadline:</strong><br/>
+      Đặt deadline sớm hơn thực tế 1–2 ngày để có thời gian review và sửa lỗi trước khi nộp.
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function colorStatusSelect(sel) {
+  var bg = { chua_lam:'rgba(255,255,255,.08)', dang_lam:'rgba(255,209,102,.15)', xong:'rgba(67,233,123,.12)' };
+  sel.style.background = bg[sel.value] || bg.chua_lam;
+}
+// Init
+var statusSel = document.getElementById('trang_thai');
+if (statusSel) colorStatusSelect(statusSel);
+</script>
+{% endblock %}
+
+
+
+
+
+tasks.html
+
+{% extends "layout.html" %}
+{% block title %}Quản lý công việc{% endblock %}
+
+{% block content %}
+
+<div class="topbar">
+  <div>
+    <h1 class="page-title">Quản lý <span>công việc</span></h1>
+    <p class="page-subtitle">Tất cả nhiệm vụ trong các dự án ({{ tasks|length }} nhiệm vụ)</p>
+  </div>
+  <a href="{{ url_for('task_add') }}" class="btn btn-primary" id="btn-add-task">
+    ＋ Thêm nhiệm vụ
+  </a>
+</div>
+
+<!--  BỘ LỌC & TÌM KIẾM  -->
+<div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;align-items:center">
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn btn-outline btn-sm filter-btn active" onclick="filterTasks('all',this)">
+      📋 Tất cả <span style="margin-left:4px;padding:1px 6px;background:rgba(255,255,255,.1);border-radius:99px;font-size:10px">{{ tasks|length }}</span>
+    </button>
+    <button class="btn btn-outline btn-sm filter-btn" onclick="filterTasks('chua_lam',this)">
+      ⏸ Chưa làm
+    </button>
+    <button class="btn btn-outline btn-sm filter-btn" onclick="filterTasks('dang_lam',this)">
+      ▶ Đang làm
+    </button>
+    <button class="btn btn-outline btn-sm filter-btn" onclick="filterTasks('xong',this)">
+      ✅ Xong
+    </button>
+  </div>
+  <div style="margin-left:auto">
+    <input type="text" class="form-control" id="search-task"
+           placeholder="🔍 Tìm kiếm..."
+           style="width:220px;padding:8px 14px;font-size:13px"
+           oninput="searchTasks(this.value)" />
+  </div>
+</div>
+
+<!--  BẢNG NHIỆM VỤ  -->
+<div class="card">
+  <div class="card-header">
+    <span class="card-title">📋 Danh sách nhiệm vụ</span>
+    <a href="{{ url_for('project_add') }}" class="btn btn-outline btn-sm">＋ Dự án mới</a>
+  </div>
+
+  {% if tasks %}
+  <div class="table-wrapper">
+    <table id="tasks-table">
+      <thead>
+        <tr>
+          <th>Trạng thái</th>
+          <th>Tên nhiệm vụ</th>
+          <th>Dự án</th>
+          <th>Người phụ trách</th>
+          <th>Deadline</th>
+          <th>Hành động</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tasks %}
+        <tr class="task-row" data-status="{{ t.trang_thai }}"
+            data-name="{{ t.ten_nhiem_vu | lower }}">
+          <td>
+            <select class="status-sel" data-id="{{ t.id }}"
+                    onchange="quickStatus({{ t.id }}, this)"
+                    style="background:transparent;border:none;font-size:12px;
+                           font-weight:600;cursor:pointer;padding:4px 6px;
+                           border-radius:99px;outline:none">
+              <option value="chua_lam" {% if t.trang_thai=='chua_lam' %}selected{% endif %}
+                      style="background:#1a1927">⏸ Chưa làm</option>
+              <option value="dang_lam" {% if t.trang_thai=='dang_lam' %}selected{% endif %}
+                      style="background:#1a1927">▶ Đang làm</option>
+              <option value="xong"     {% if t.trang_thai=='xong'     %}selected{% endif %}
+                      style="background:#1a1927">✅ Xong</option>
+            </select>
+          </td>
+          <td>
+            <div class="task-name-cell" data-id="{{ t.id }}"
+                 style="font-weight:600;font-size:13px
+                 {% if t.trang_thai == 'xong' %};text-decoration:line-through;color:var(--text-muted){% endif %}">
+              {{ t.ten_nhiem_vu }}
+            </div>
+            {% if t.mo_ta %}
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px">
+              {{ t.mo_ta[:50] }}{% if t.mo_ta|length > 50 %}...{% endif %}
+            </div>
+            {% endif %}
+          </td>
+          <td>
+            <a href="{{ url_for('project_detail', project_id=t.du_an_id) }}"
+               style="font-size:12px;padding:3px 10px;background:rgba(108,99,255,.12);
+                      border-radius:99px;color:var(--primary-light);text-decoration:none;
+                      display:inline-block">
+              📁 {{ t.ten_du_an }}
+            </a>
+          </td>
+          <td>
+            {% if t.ten_phu_trach %}
+            <div style="display:flex;align-items:center;gap:6px">
+              <div style="width:24px;height:24px;border-radius:50%;
+                          background:linear-gradient(135deg,var(--primary),var(--secondary));
+                          display:grid;place-items:center;font-size:11px;font-weight:700">
+                {{ t.ten_phu_trach[0]|upper }}
+              </div>
+              <span style="font-size:13px">{{ t.ten_phu_trach }}</span>
+            </div>
+            {% else %}
+            <span style="color:var(--text-sub);font-size:12px">— Chưa phân công</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if t.deadline %}
+            <span class="task-deadline">📅 {{ t.deadline }}</span>
+            {% else %}
+            <span style="color:var(--text-sub);font-size:12px">—</span>
+            {% endif %}
+          </td>
+          <td>
+            <div style="display:flex;gap:6px">
+              <a href="{{ url_for('task_edit', task_id=t.id) }}"
+                 class="btn btn-outline btn-sm" title="Sửa nhiệm vụ">✏️</a>
+              <form method="POST" action="{{ url_for('task_delete', task_id=t.id) }}"
+                    onsubmit="return confirm('Xac nhan xoa nhiem vu nay?')">
+                <button type="submit" class="btn btn-danger btn-sm" title="Xóa">🗑️</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% else %}
+  <div class="card-body">
+    <div class="empty-state" style="padding:64px 24px">
+      <div class="empty-state-icon">📭</div>
+      <div class="empty-state-title">Chưa có nhiệm vụ nào</div>
+      <p class="empty-state-desc" style="margin-bottom:20px">
+        Tạo dự án trước, rồi thêm nhiệm vụ vào từng dự án.
+      </p>
+      <div style="display:flex;gap:10px;justify-content:center">
+        <a href="{{ url_for('project_add') }}" class="btn btn-primary">＋ Tạo dự án</a>
+        <a href="{{ url_for('task_add') }}" class="btn btn-outline">＋ Thêm nhiệm vụ</a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Lọc theo trạng thái
+function filterTasks(status, btn) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.task-row').forEach(r => {
+    r.style.display = (status === 'all' || r.dataset.status === status) ? '' : 'none';
+  });
+}
+
+// Tìm kiếm
+function searchTasks(q) {
+  var lower = q.toLowerCase();
+  document.querySelectorAll('.task-row').forEach(r => {
+    r.style.display = r.dataset.name.includes(lower) ? '' : 'none';
+  });
+}
+
+// Đổi trạng thái nhanh
+function colorSel(sel) {
+  var bg = {chua_lam:'rgba(255,255,255,.08)',dang_lam:'rgba(255,209,102,.15)',xong:'rgba(67,233,123,.12)'};
+  var cl = {chua_lam:'var(--text-muted)',dang_lam:'var(--warning)',xong:'var(--accent)'};
+  sel.style.background = bg[sel.value];
+  sel.style.color      = cl[sel.value];
+}
+
+document.querySelectorAll('.status-sel').forEach(colorSel);
+
+function quickStatus(id, sel) {
+  var form = new FormData();
+  form.append('trang_thai', sel.value);
+  fetch('/nhiem-vu/' + id + '/trang-thai', {method:'POST', body:form})
+    .then(r => r.json()).then(d => {
+      if (d.ok) {
+        colorSel(sel);
+        var row = sel.closest('.task-row');
+        row.dataset.status = d.trang_thai;
+        var nameEl = row.querySelector('.task-name-cell');
+        if (nameEl) {
+          nameEl.style.textDecoration = d.trang_thai === 'xong' ? 'line-through' : '';
+          nameEl.style.color = d.trang_thai === 'xong' ? 'var(--text-muted)' : '';
+        }
+      }
+    });
+}
+</script>
+{% endblock %}
