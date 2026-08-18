@@ -1,0 +1,584 @@
+
+# FILE: app.py
+# MÔ TẢ: Ứng dụng Flask – Hệ thống Quản lý Dự án Nhóm
+
+import os
+import sqlite3
+from datetime import date
+from flask import (Flask, render_template, request,
+                   redirect, url_for, flash, session, jsonify)
+from werkzeug.security import generate_password_hash, check_password_hash
+from functools import wraps
+
+
+# KHỞI TẠO ỨNG DỤNG FLASK
+app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'tuan03-nhom02-flask-2026')
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH  = os.path.join(BASE_DIR, 'database.db')
+
+
+# HÀM TIỆN ÍCH – CƠ SỞ DỮ LIỆU
+def get_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")   # Bật khoá ngoại
+    return conn
+
+
+def init_db():
+    """Khởi tạo tất cả bảng nếu chưa tồn tại."""
+    conn = get_db()
+    cur  = conn.cursor()
+    cur.executescript("""
+        CREATE TABLE IF NOT EXISTS users (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            ten         TEXT    NOT NULL,
+            email       TEXT    NOT NULL UNIQUE,
+            mat_khau    TEXT    NOT NULL,
+            ngay_tao    TEXT    DEFAULT (date('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS projects (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            ten_du_an       TEXT    NOT NULL,
+            mo_ta           TEXT,
+            nguoi_tao       INTEGER NOT NULL,
+            ngay_bat_dau    TEXT,
+            ngay_ket_thuc   TEXT,
+            ngay_tao        TEXT    DEFAULT (date('now')),
+            FOREIGN KEY (nguoi_tao) REFERENCES users(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS tasks (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            ten_nhiem_vu    TEXT    NOT NULL,
+            mo_ta           TEXT,
+            du_an_id        INTEGER NOT NULL,
+            phu_trach       INTEGER,
+            deadline        TEXT,
+            trang_thai      TEXT    DEFAULT 'chua_lam'
+                            CHECK (trang_thai IN ('chua_lam','dang_lam','xong')),
+            ngay_tao        TEXT    DEFAULT (date('now')),
+            FOREIGN KEY (du_an_id)  REFERENCES projects(id) ON DELETE CASCADE,
+            FOREIGN KEY (phu_trach) REFERENCES users(id)
+        );
+    """)
+    conn.commit()
+    conn.close()
+
+
+# DECORATOR – YÊU CẦU ĐĂNG NHẬP
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if 'user_id' not in session:
+            flash('Vui long dang nhap de tiep tuc.', 'warning')
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated
+
+
+# HÀM HELPER – LẤY DỮ LIỆU THƯỜNG DÙNG
+def get_all_users():
+    conn = get_db()
+    users = conn.execute("SELECT id, ten, email FROM users ORDER BY ten").fetchall()
+    conn.close()
+    return users
+
+def get_all_projects():
+    conn = get_db()
+    projects = conn.execute(
+        "SELECT id, ten_du_an FROM projects ORDER BY ten_du_an"
+    ).fetchall()
+    conn.close()
+    return projects
+
+def get_project_or_404(project_id):
+    """Lấy dự án theo ID, trả None nếu không tồn tại."""
+    conn = get_db()
+    p = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+    conn.close()
+    return p
+
+def get_task_or_404(task_id):
+    conn = get_db()
+    t = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    conn.close()
+    return t
+
+
+# PHẦN 1: AUTH (Tuần 02 – giữ nguyên)
+
+@app.route('/dang-ky', methods=['GET', 'POST'])
+def register():
+    if 'user_id' in session:
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        ten      = request.form.get('ten', '').strip()
+        email    = request.form.get('email', '').strip().lower()
+        mat_khau = request.form.get('mat_khau', '')
+        xac_nhan = request.form.get('xac_nhan_mat_khau', '')
+
+        loi = []
+        if not ten or len(ten) < 2:
+            loi.append('Ho ten phai co it nhat 2 ky tu.')
+        if not email or '@' not in email:
+            loi.append('Email khong hop le.')
+        if not mat_khau or len(mat_khau) < 6:
+            loi.append('Mat khau phai co it nhat 6 ky tu.')
+        if mat_khau != xac_nhan:
+            loi.append('Mat khau xac nhan khong khop.')
+
+        if loi:
+            for l in loi:
+                flash(l, 'danger')
+            return render_template('register.html', ten=ten, email=email)
+
+        try:
+            conn = get_db()
+            conn.execute(
+                "INSERT INTO users (ten, email, mat_khau) VALUES (?, ?, ?)",
+                (ten, email, generate_password_hash(mat_khau))
+            )
+            conn.commit()
+            conn.close()
+            flash('Dang ky thanh cong! Hay dang nhap.', 'success')
+            return redirect(url_for('login'))
+        except sqlite3.IntegrityError:
+            flash('Email nay da duoc su dung.', 'danger')
+            return render_template('register.html', ten=ten, email=email)
+
+    return render_template('register.html')
+
+
+@app.route('/dang-nhap', methods=['GET', 'POST'])
+def login():
+    if 'user_id' in session:
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        email    = request.form.get('email', '').strip().lower()
+        mat_khau = request.form.get('mat_khau', '')
+
+        if not email or not mat_khau:
+            flash('Vui long nhap day du email va mat khau.', 'danger')
+            return render_template('login.html', email=email)
+
+        conn = get_db()
+        user = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+        conn.close()
+
+        if user is None or not check_password_hash(user['mat_khau'], mat_khau):
+            flash('Email hoac mat khau khong dung.', 'danger')
+            return render_template('login.html', email=email)
+
+        session.clear()
+        session['user_id']  = user['id']
+        session['ten_user'] = user['ten']
+        session['email']    = user['email']
+
+        flash(f'Chao mung tro lai, {user["ten"]}!', 'success')
+        return redirect(url_for('index'))
+
+    return render_template('login.html')
+
+
+@app.route('/dang-xuat')
+@login_required
+def logout():
+    ten = session.get('ten_user', '')
+    session.clear()
+    flash(f'Ban da dang xuat. Hen gap lai, {ten}!', 'info')
+    return redirect(url_for('login'))
+
+
+# PHẦN 2: TRANG CHỦ DASHBOARD
+
+@app.route('/')
+@login_required
+def index():
+    conn = get_db()
+
+    projects = conn.execute("""
+        SELECT p.*, u.ten AS ten_nguoi_tao,
+               COUNT(t.id)  AS tong_nhiem_vu,
+               SUM(CASE WHEN t.trang_thai = 'xong' THEN 1 ELSE 0 END) AS da_xong
+        FROM projects p
+        JOIN users u ON p.nguoi_tao = u.id
+        LEFT JOIN tasks t ON t.du_an_id = p.id
+        GROUP BY p.id
+        ORDER BY p.ngay_tao DESC
+        LIMIT 6
+    """).fetchall()
+
+    my_tasks = conn.execute("""
+        SELECT t.*, p.ten_du_an
+        FROM tasks t
+        JOIN projects p ON t.du_an_id = p.id
+        WHERE t.phu_trach = ?
+        ORDER BY CASE t.trang_thai
+            WHEN 'dang_lam' THEN 1
+            WHEN 'chua_lam' THEN 2
+            ELSE 3 END,
+            t.deadline ASC
+        LIMIT 8
+    """, (session['user_id'],)).fetchall()
+
+    tong_du_an    = conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0]
+    tong_nhiem_vu = conn.execute("SELECT COUNT(*) FROM tasks WHERE phu_trach = ?",
+                                 (session['user_id'],)).fetchone()[0]
+    nhiem_vu_xong = conn.execute(
+        "SELECT COUNT(*) FROM tasks WHERE phu_trach = ? AND trang_thai = 'xong'",
+        (session['user_id'],)).fetchone()[0]
+    nhiem_vu_dang = conn.execute(
+        "SELECT COUNT(*) FROM tasks WHERE phu_trach = ? AND trang_thai = 'dang_lam'",
+        (session['user_id'],)).fetchone()[0]
+
+    conn.close()
+    return render_template('index.html',
+                           projects=projects, my_tasks=my_tasks,
+                           tong_du_an=tong_du_an,
+                           tong_nhiem_vu=tong_nhiem_vu,
+                           nhiem_vu_xong=nhiem_vu_xong,
+                           nhiem_vu_dang=nhiem_vu_dang,
+                           ten_user=session.get('ten_user'))
+
+
+# PHẦN 3: CRUD DỰ ÁN (Lý Thị Hà – Tuần 03)
+
+#  3.1 DANH SÁCH DỰ ÁN 
+@app.route('/du-an')
+@login_required
+def projects_list():
+    """Hiển thị toàn bộ dự án với thống kê nhiệm vụ."""
+    conn = get_db()
+    projects = conn.execute("""
+        SELECT p.*, u.ten AS ten_nguoi_tao,
+               COUNT(t.id)  AS tong_nhiem_vu,
+               SUM(CASE WHEN t.trang_thai = 'xong'     THEN 1 ELSE 0 END) AS da_xong,
+               SUM(CASE WHEN t.trang_thai = 'dang_lam' THEN 1 ELSE 0 END) AS dang_lam,
+               SUM(CASE WHEN t.trang_thai = 'chua_lam' THEN 1 ELSE 0 END) AS chua_lam
+        FROM projects p
+        JOIN users u ON p.nguoi_tao = u.id
+        LEFT JOIN tasks t ON t.du_an_id = p.id
+        GROUP BY p.id
+        ORDER BY p.ngay_tao DESC
+    """).fetchall()
+    conn.close()
+    return render_template('projects.html', projects=projects,
+                           ten_user=session.get('ten_user'))
+
+
+#  3.2 CHI TIẾT DỰ ÁN 
+@app.route('/du-an/<int:project_id>')
+@login_required
+def project_detail(project_id):
+    """Chi tiết dự án + danh sách nhiệm vụ bên trong."""
+    p = get_project_or_404(project_id)
+    if not p:
+        flash('Khong tim thay du an.', 'danger')
+        return redirect(url_for('projects_list'))
+
+    conn = get_db()
+    tasks = conn.execute("""
+        SELECT t.*, u.ten AS ten_phu_trach
+        FROM tasks t
+        LEFT JOIN users u ON t.phu_trach = u.id
+        WHERE t.du_an_id = ?
+        ORDER BY CASE t.trang_thai
+            WHEN 'dang_lam' THEN 1
+            WHEN 'chua_lam' THEN 2
+            ELSE 3 END,
+            t.deadline ASC
+    """, (project_id,)).fetchall()
+
+    nguoi_tao = conn.execute(
+        "SELECT ten FROM users WHERE id = ?", (p['nguoi_tao'],)
+    ).fetchone()
+
+    tong   = len(tasks)
+    xong   = sum(1 for t in tasks if t['trang_thai'] == 'xong')
+    dang   = sum(1 for t in tasks if t['trang_thai'] == 'dang_lam')
+    chua   = sum(1 for t in tasks if t['trang_thai'] == 'chua_lam')
+    pct    = int(xong / tong * 100) if tong else 0
+
+    users = get_all_users()
+    conn.close()
+
+    return render_template('project_detail.html',
+                           project=p, tasks=tasks, users=users,
+                           ten_nguoi_tao=nguoi_tao['ten'] if nguoi_tao else '?',
+                           tong=tong, xong=xong, dang=dang, chua=chua, pct=pct,
+                           today=date.today().isoformat(),
+                           ten_user=session.get('ten_user'))
+
+
+#  3.3 THÊM DỰ ÁN 
+@app.route('/du-an/them', methods=['GET', 'POST'])
+@login_required
+def project_add():
+    """Form thêm dự án mới."""
+    if request.method == 'POST':
+        ten_du_an     = request.form.get('ten_du_an', '').strip()
+        mo_ta         = request.form.get('mo_ta', '').strip()
+        ngay_bat_dau  = request.form.get('ngay_bat_dau', '')
+        ngay_ket_thuc = request.form.get('ngay_ket_thuc', '')
+
+        # Kiểm tra đầu vào
+        if not ten_du_an:
+            flash('Ten du an khong duoc de trong.', 'danger')
+            return render_template('project_form.html',
+                                   action='add', ten_user=session.get('ten_user'))
+
+        if ngay_bat_dau and ngay_ket_thuc and ngay_bat_dau > ngay_ket_thuc:
+            flash('Ngay ket thuc phai sau ngay bat dau.', 'danger')
+            return render_template('project_form.html',
+                                   action='add', ten_user=session.get('ten_user'),
+                                   form_data=request.form)
+
+        conn = get_db()
+        conn.execute("""
+            INSERT INTO projects (ten_du_an, mo_ta, nguoi_tao, ngay_bat_dau, ngay_ket_thuc)
+            VALUES (?, ?, ?, ?, ?)
+        """, (ten_du_an, mo_ta, session['user_id'],
+              ngay_bat_dau or None, ngay_ket_thuc or None))
+        conn.commit()
+        new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.close()
+
+        flash(f'Da tao du an "{ten_du_an}" thanh cong!', 'success')
+        return redirect(url_for('project_detail', project_id=new_id))
+
+    return render_template('project_form.html',
+                           action='add', ten_user=session.get('ten_user'),
+                           today=date.today().isoformat())
+
+
+#  3.4 SỬA DỰ ÁN 
+@app.route('/du-an/<int:project_id>/sua', methods=['GET', 'POST'])
+@login_required
+def project_edit(project_id):
+    """Form sửa thông tin dự án."""
+    p = get_project_or_404(project_id)
+    if not p:
+        flash('Khong tim thay du an.', 'danger')
+        return redirect(url_for('projects_list'))
+
+    if request.method == 'POST':
+        ten_du_an     = request.form.get('ten_du_an', '').strip()
+        mo_ta         = request.form.get('mo_ta', '').strip()
+        ngay_bat_dau  = request.form.get('ngay_bat_dau', '')
+        ngay_ket_thuc = request.form.get('ngay_ket_thuc', '')
+
+        if not ten_du_an:
+            flash('Ten du an khong duoc de trong.', 'danger')
+            return render_template('project_form.html',
+                                   action='edit', project=p,
+                                   ten_user=session.get('ten_user'))
+
+        conn = get_db()
+        conn.execute("""
+            UPDATE projects
+            SET ten_du_an=?, mo_ta=?, ngay_bat_dau=?, ngay_ket_thuc=?
+            WHERE id=?
+        """, (ten_du_an, mo_ta,
+              ngay_bat_dau or None, ngay_ket_thuc or None, project_id))
+        conn.commit()
+        conn.close()
+
+        flash(f'Cap nhat du an "{ten_du_an}" thanh cong!', 'success')
+        return redirect(url_for('project_detail', project_id=project_id))
+
+    return render_template('project_form.html',
+                           action='edit', project=p,
+                           ten_user=session.get('ten_user'))
+
+
+#  3.5 XÓA DỰ ÁN 
+@app.route('/du-an/<int:project_id>/xoa', methods=['POST'])
+@login_required
+def project_delete(project_id):
+    """Xóa dự án (CASCADE xóa luôn nhiệm vụ bên trong)."""
+    p = get_project_or_404(project_id)
+    if not p:
+        flash('Khong tim thay du an.', 'danger')
+        return redirect(url_for('projects_list'))
+
+    conn = get_db()
+    # Xóa tasks trước (đề phòng PRAGMA foreign_keys chưa bật)
+    conn.execute("DELETE FROM tasks WHERE du_an_id = ?", (project_id,))
+    conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+    conn.commit()
+    conn.close()
+
+    flash(f'Da xoa du an "{p["ten_du_an"]}" va toan bo nhiem vu ben trong.', 'success')
+    return redirect(url_for('projects_list'))
+
+
+
+#  4.1 TẤT CẢ NHIỆM VỤ 
+@app.route('/quan-ly-cong-viec')
+@login_required
+def tasks_page():
+    conn = get_db()
+    tasks = conn.execute("""
+        SELECT t.*, p.ten_du_an, u.ten AS ten_phu_trach
+        FROM tasks t
+        JOIN projects p ON t.du_an_id = p.id
+        LEFT JOIN users u ON t.phu_trach = u.id
+        ORDER BY CASE t.trang_thai
+            WHEN 'dang_lam' THEN 1
+            WHEN 'chua_lam' THEN 2
+            ELSE 3 END,
+            t.deadline ASC
+    """).fetchall()
+    projects = get_all_projects()
+    conn.close()
+    return render_template('tasks.html', tasks=tasks, projects=projects,
+                           ten_user=session.get('ten_user'))
+
+
+#  4.2 THÊM NHIỆM VỤ 
+@app.route('/nhiem-vu/them', methods=['GET', 'POST'])
+@app.route('/du-an/<int:project_id>/nhiem-vu/them', methods=['GET', 'POST'])
+@login_required
+def task_add(project_id=None):
+    """Thêm nhiệm vụ mới (có thể chỉ định sẵn dự án)."""
+    projects = get_all_projects()
+    users    = get_all_users()
+
+    if request.method == 'POST':
+        ten_nhiem_vu = request.form.get('ten_nhiem_vu', '').strip()
+        mo_ta        = request.form.get('mo_ta', '').strip()
+        du_an_id     = request.form.get('du_an_id', '')
+        phu_trach    = request.form.get('phu_trach', '') or None
+        deadline     = request.form.get('deadline', '') or None
+        trang_thai   = request.form.get('trang_thai', 'chua_lam')
+
+        if not ten_nhiem_vu:
+            flash('Ten nhiem vu khong duoc de trong.', 'danger')
+            return render_template('task_form.html', action='add',
+                                   projects=projects, users=users,
+                                   project_id=project_id,
+                                   ten_user=session.get('ten_user'))
+
+        if not du_an_id:
+            flash('Vui long chon du an.', 'danger')
+            return render_template('task_form.html', action='add',
+                                   projects=projects, users=users,
+                                   project_id=project_id,
+                                   ten_user=session.get('ten_user'))
+
+        conn = get_db()
+        conn.execute("""
+            INSERT INTO tasks (ten_nhiem_vu, mo_ta, du_an_id, phu_trach, deadline, trang_thai)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (ten_nhiem_vu, mo_ta, du_an_id, phu_trach, deadline, trang_thai))
+        conn.commit()
+        conn.close()
+
+        flash(f'Da them nhiem vu "{ten_nhiem_vu}"!', 'success')
+        if project_id:
+            return redirect(url_for('project_detail', project_id=project_id))
+        return redirect(url_for('tasks_page'))
+
+    return render_template('task_form.html', action='add',
+                           projects=projects, users=users,
+                           project_id=project_id,
+                           ten_user=session.get('ten_user'),
+                           today=date.today().isoformat())
+
+
+#  4.3 SỬA NHIỆM VỤ 
+@app.route('/nhiem-vu/<int:task_id>/sua', methods=['GET', 'POST'])
+@login_required
+def task_edit(task_id):
+    t = get_task_or_404(task_id)
+    if not t:
+        flash('Khong tim thay nhiem vu.', 'danger')
+        return redirect(url_for('tasks_page'))
+
+    projects = get_all_projects()
+    users    = get_all_users()
+
+    if request.method == 'POST':
+        ten_nhiem_vu = request.form.get('ten_nhiem_vu', '').strip()
+        mo_ta        = request.form.get('mo_ta', '').strip()
+        du_an_id     = request.form.get('du_an_id', t['du_an_id'])
+        phu_trach    = request.form.get('phu_trach', '') or None
+        deadline     = request.form.get('deadline', '') or None
+        trang_thai   = request.form.get('trang_thai', 'chua_lam')
+
+        if not ten_nhiem_vu:
+            flash('Ten nhiem vu khong duoc de trong.', 'danger')
+            return render_template('task_form.html', action='edit',
+                                   task=t, projects=projects, users=users,
+                                   ten_user=session.get('ten_user'))
+
+        conn = get_db()
+        conn.execute("""
+            UPDATE tasks
+            SET ten_nhiem_vu=?, mo_ta=?, du_an_id=?,
+                phu_trach=?, deadline=?, trang_thai=?
+            WHERE id=?
+        """, (ten_nhiem_vu, mo_ta, du_an_id,
+              phu_trach, deadline, trang_thai, task_id))
+        conn.commit()
+        conn.close()
+
+        flash(f'Cap nhat nhiem vu "{ten_nhiem_vu}" thanh cong!', 'success')
+        return redirect(url_for('project_detail', project_id=du_an_id))
+
+    return render_template('task_form.html', action='edit',
+                           task=t, projects=projects, users=users,
+                           ten_user=session.get('ten_user'))
+
+
+#  4.4 XÓA NHIỆM VỤ 
+@app.route('/nhiem-vu/<int:task_id>/xoa', methods=['POST'])
+@login_required
+def task_delete(task_id):
+    t = get_task_or_404(task_id)
+    if not t:
+        flash('Khong tim thay nhiem vu.', 'danger')
+        return redirect(url_for('tasks_page'))
+
+    du_an_id = t['du_an_id']
+    conn = get_db()
+    conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+    conn.commit()
+    conn.close()
+
+    flash(f'Da xoa nhiem vu "{t["ten_nhiem_vu"]}".', 'success')
+    # Redirect về trang chi tiết dự án nếu có referer
+    ref = request.referrer or ''
+    if f'/du-an/{du_an_id}' in ref:
+        return redirect(url_for('project_detail', project_id=du_an_id))
+    return redirect(url_for('tasks_page'))
+
+
+#  4.5 ĐỔI TRẠNG THÁI NHANH (AJAX) 
+@app.route('/nhiem-vu/<int:task_id>/trang-thai', methods=['POST'])
+@login_required
+def task_update_status(task_id):
+    """Cập nhật trạng thái nhiệm vụ nhanh (click trực tiếp trên bảng)."""
+    trang_thai = request.form.get('trang_thai')
+    if trang_thai not in ('chua_lam', 'dang_lam', 'xong'):
+        return jsonify({'ok': False, 'msg': 'Trang thai khong hop le'}), 400
+
+    conn = get_db()
+    conn.execute("UPDATE tasks SET trang_thai=? WHERE id=?", (trang_thai, task_id))
+    conn.commit()
+    conn.close()
+    return jsonify({'ok': True, 'trang_thai': trang_thai})
+
+
+# KHỞI ĐỘNG SERVER
+if __name__ == '__main__':
+    init_db()
+    print("[OK] CSDL da san sang!")
+    print("[SERVER] http://127.0.0.1:5000")
+    app.run(debug=True, host='0.0.0.0', port=5000)
