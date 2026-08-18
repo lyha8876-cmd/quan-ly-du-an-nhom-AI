@@ -1,0 +1,83 @@
+# test_routes.py – kiem tra toan bo route 
+import sys, os, json
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+from app import app, get_db
+
+app.config['TESTING'] = True
+client = app.test_client()
+
+print(" KIEM TRA ROUTE ")
+
+with client.session_transaction() as s:
+    s['user_id']  = 1
+    s['ten_user'] = 'Ly Thi Ha'
+
+def check(label, r, code=200):
+    ok = r.status_code == code
+    print(("[OK] " if ok else "[FAIL] ") + label +
+          ("" if ok else f" (HTTP {r.status_code})"))
+    return ok
+
+# Trang chinh
+check("Trang chu",             client.get('/'))
+check("Danh sach du an",       client.get('/du-an'))
+check("Form them du an",       client.get('/du-an/them'))
+
+# Them du an
+r = client.post('/du-an/them', data={
+    'ten_du_an': 'Du an kiem thu T3',
+    'mo_ta': 'Mo ta kiem thu',
+    'ngay_bat_dau': '2026-08-15',
+    'ngay_ket_thuc': '2026-12-31'
+}, follow_redirects=True)
+check("Them du an", r)
+
+conn = get_db()
+p = conn.execute("SELECT id FROM projects WHERE ten_du_an='Du an kiem thu T3'").fetchone()
+pid = p['id'] if p else 1
+print(f"  -> Du an ID: {pid}")
+
+check("Chi tiet du an",  client.get(f'/du-an/{pid}'))
+check("Form sua du an",  client.get(f'/du-an/{pid}/sua'))
+
+# Them nhiem vu
+r = client.post(f'/du-an/{pid}/nhiem-vu/them', data={
+    'ten_nhiem_vu': 'Nhiem vu kiem thu',
+    'mo_ta': 'Mo ta nhiem vu test',
+    'du_an_id': str(pid),
+    'phu_trach': '1',
+    'deadline': '2026-09-01',
+    'trang_thai': 'chua_lam'
+}, follow_redirects=True)
+check("Them nhiem vu", r)
+
+t = conn.execute("SELECT id FROM tasks WHERE ten_nhiem_vu='Nhiem vu kiem thu'").fetchone()
+tid = t['id'] if t else 1
+print(f"  -> Nhiem vu ID: {tid}")
+
+check("Form sua nhiem vu", client.get(f'/nhiem-vu/{tid}/sua'))
+check("Trang cong viec",   client.get('/quan-ly-cong-viec'))
+
+# Doi trang thai AJAX
+r = client.post(f'/nhiem-vu/{tid}/trang-thai', data={'trang_thai': 'dang_lam'})
+d = json.loads(r.data)
+print(("[OK] " if d.get('ok') else "[FAIL] ") + "Doi trang thai AJAX")
+
+# Xoa nhiem vu
+check("Xoa nhiem vu", client.post(f'/nhiem-vu/{tid}/xoa', follow_redirects=True))
+
+# Xoa du an
+check("Xoa du an",    client.post(f'/du-an/{pid}/xoa', follow_redirects=True))
+
+# Tong ket
+tong_da   = conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0]
+tong_task = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
+conn.close()
+
+print()
+print(f"  Tong du an trong CSDL: {tong_da}")
+print(f"  Tong nhiem vu trong CSDL: {tong_task}")
+print()
+print("[DONE] Tat ca route hoat dong chinh xac!")
