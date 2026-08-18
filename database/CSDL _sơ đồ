@@ -1,0 +1,35 @@
+# Sơ đồ Quan hệ Thực thể (ERD) - Hệ thống Quản lý Dự án TaskFlow
+
+Sơ đồ thể hiện mối quan hệ liên kết khóa ngoại chặt chẽ giữa 3 bảng: `users`, `projects` và `tasks`.
+
+```mermaid
+erDiagram
+    USERS ||--o{ PROJECTS : "tạo_dự_án (1-N)"
+    USERS ||--o{ TASKS : "được_phân_công (1-N)"
+    PROJECTS ||--o{ TASKS : "chứa_nhiệm_vụ (1-N)"
+
+    USERS {
+        int id PK "Mã thành viên (Khóa chính)"
+        varchar ten "Họ tên thành viên"
+        varchar email "Email đăng nhập"
+        varchar mat_khau "Mật khẩu"
+    }
+
+    PROJECTS {
+        int id PK "Mã dự án (Khóa chính)"
+        varchar ten_du_an "Tên dự án"
+        text mo_ta "Mô tả dự án"
+        int nguoi_tao FK "Mã người tạo (Khóa ngoại -> USERS.id)"
+        date ngay_bat_dau "Ngày bắt đầu"
+        date ngay_ket_thuc "Ngày kết thúc"
+    }
+
+    TASKS {
+        int id PK "Mã nhiệm vụ (Khóa chính)"
+        varchar ten_nhiem_vu "Tên việc cần làm"
+        varchar mo_ta "Mô tả chi tiết"
+        int du_an_id FK "Thuộc dự án nào (Khóa ngoại -> PROJECTS.id)"
+        int phu_trach FK "Người phụ trách (Khóa ngoại -> USERS.id)"
+        date deadline "Ngày hết hạn"
+        varchar trang_thai "Chưa làm / Đang làm / Xong"
+    }
